@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeleDrop Setup</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            text-align: center;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0077b3;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #error-msg {
+            color: #dc3545;
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>TeleDrop Setup</h1>
+
+        <form id="step1-form">
+            <div class="form-group">
+                <label for="api_id">API ID (<a href="https://my.telegram.org/apps" target="_blank"
+                        style="color: #0088cc; text-decoration: none;">Get it here</a>)</label>
+                <input type="text" id="api_id" required>
+            </div>
+            <div class="form-group">
+                <label for="api_hash">API Hash</label>
+                <input type="text" id="api_hash" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone Number</label>
+                <input type="text" id="phone" placeholder="+1234567890" required>
+            </div>
+            <button type="submit">Send Code</button>
+        </form>
+
+        <form id="step2-form" class="hidden">
+            <div class="form-group">
+                <label for="code">OTP Code</label>
+                <input type="text" id="code" required>
+            </div>
+            <div class="form-group">
+                <label for="password">2FA Password (Optional)</label>
+                <input type="password" id="password">
+            </div>
+            <button type="submit">Sign In</button>
+        </form>
+
+        <div id="error-msg"></div>
+    </div>
+
+    <script>
+        const step1Form = document.getElementById('step1-form');
+        const step2Form = document.getElementById('step2-form');
+        const errorMsg = document.getElementById('error-msg');
+        let phoneHash = '';
+
+        step1Form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.innerText = '';
+            const api_id = document.getElementById('api_id').value;
+            const api_hash = document.getElementById('api_hash').value;
+            const phone = document.getElementById('phone').value;
+
+            try {
+                const res = await fetch('/send_code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_id, api_hash, phone })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    phoneHash = data.phone_code_hash;
+                    step1Form.classList.add('hidden');
+                    step2Form.classList.remove('hidden');
+                } else {
+                    errorMsg.innerText = data.detail || 'Failed to send code';
+                }
+            } catch (err) {
+                errorMsg.innerText = 'Network error';
+            }
+        });
+
+        step2Form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.innerText = '';
+            const code = document.getElementById('code').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone_code_hash: phoneHash,
+                        phone_code: code,
+                        password: password,
+                        phone: document.getElementById('phone').value
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    errorMsg.innerText = data.detail || 'Login failed';
+                }
+            } catch (err) {
+                errorMsg.innerText = 'Network error';
+            }
+        });
+    </script>
+</body>
+
+</html>

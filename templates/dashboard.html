@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TeleDrop Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #fff;
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            border-bottom: 2px solid #333;
+            padding-bottom: 0.5rem;
+        }
+
+        .card {
+            background: #1e1e1e;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: #333;
+            color: white;
+        }
+
+        .status-idle {
+            background: #6c757d;
+        }
+
+        .status-downloading {
+            background: #007bff;
+        }
+
+        .status-processing {
+            background: #fd7e14;
+        }
+
+        .progress-container {
+            margin-top: 1rem;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            height: 20px;
+        }
+
+        .progress-bar {
+            background: #28a745;
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #bbb;
+        }
+
+        .filename {
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.5rem;
+            word-break: break-all;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #777;
+            padding: 2rem 0;
+            font-style: italic;
+        }
+
+        .format-bytes {
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>TeleDrop Dashboard</h1>
+
+        <div class="card" style="margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div style="flex-grow: 1;">
+                    <label style="display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 0.25rem;">Download
+                        Directory Path</label>
+                    <input type="text" id="path-input"
+                        style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #444; background: #222; color: white; box-sizing: border-box;"
+                        placeholder="/mnt/hdd/Movies">
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem;">
+                <label style="display: flex; align-items: center; font-size: 0.9rem; color: #ccc; cursor: pointer;">
+                    <input type="checkbox" id="rename-input" style="margin-right: 8px; width: 16px; height: 16px;">
+                    Smart Rename to "Movie (Year)" format
+                </label>
+                <label style="display: flex; align-items: center; font-size: 0.9rem; color: #f39c12; cursor: pointer;">
+                    <input type="checkbox" id="debug-input" style="margin-right: 8px; width: 16px; height: 16px;">
+                    Enable Verbose Debug Logs
+                </label>
+                <button onclick="updateConfig()"
+                    style="padding: 0.5rem 1rem; background: #0088cc; color: white; border: none; border-radius: 4px; cursor: pointer;">Save
+                    Settings</button>
+            </div>
+        </div>
+
+        <div id="status-container">
+            <div class="card empty-state">Waiting for connection...</div>
+        </div>
+    </div>
+
+    <script>
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function connect() {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/status`;
+            let ws;
+
+            try {
+                ws = new WebSocket(wsUrl);
+            } catch (e) {
+                console.error("Failed to connect websocket", e);
+                return;
+            }
+
+            const container = document.getElementById('status-container');
+
+            ws.onmessage = function (event) {
+                const data = JSON.parse(event.data);
+
+                // Keep input in sync with server state if not actively typing
+                const pathInput = document.getElementById('path-input');
+                const renameInput = document.getElementById('rename-input');
+                const debugInput = document.getElementById('debug-input');
+
+                if (document.activeElement !== pathInput) {
+                    pathInput.value = data.download_path || '/mnt/hdd/Movies';
+                }
+
+                if (document.activeElement !== renameInput) {
+                    renameInput.checked = data.rename_smart !== false;
+                }
+
+                if (document.activeElement !== debugInput) {
+                    debugInput.checked = data.debug_mode === true;
+                }
+
+                if (data.status === 'idle' && (!data.queue || data.queue.length === 0)) {
+                    container.innerHTML = `
+                        <div class="card">
+                            <div><span class="status-badge status-idle">Idle</span></div>
+                            <div class="empty-state">No active downloads or processing tasks.</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let badgeClass = 'status-idle';
+                let statusText = 'Unknown';
+
+                if (data.status === 'downloading') {
+                    badgeClass = 'status-downloading';
+                    statusText = 'Downloading';
+                } else if (data.status === 'processing') {
+                    badgeClass = 'status-processing';
+                    statusText = 'Processing (pipeline.sh)';
+                } else {
+                    statusText = 'Idle (Preparing Next)';
+                }
+
+                let queueHtml = '';
+                if (data.queue && data.queue.length > 0) {
+                    queueHtml = `
+                        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #333;">
+                            <div style="font-size: 0.85rem; color: #aaa; margin-bottom: 0.5rem; text-transform: uppercase; font-weight: bold;">Up Next in Queue (${data.queue.length})</div>
+                            <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.9rem; color: #ccc;">
+                                ${data.queue.map(f => `<li style="margin-bottom: 4px;">${f}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = `
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <span class="status-badge ${badgeClass}">${statusText}</span>
+                            ${data.status === 'downloading' ? `
+                                <button onclick="cancelDownload()" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">Stop Download</button>
+                            ` : ''}
+                        </div>
+                        <div class="filename">${data.filename || 'Waiting for next item...'}</div>
+                        
+                        ${data.status === 'downloading' ? `
+                            <div class="progress-container">
+                                <div class="progress-bar" style="width: ${data.progress || 0}%"></div>
+                            </div>
+                            <div class="detail-row">
+                                <span class="format-bytes">${formatBytes(data.downloaded_bytes)} / ${formatBytes(data.total_bytes)}</span>
+                                <span>${(data.progress || 0).toFixed(1)}%</span>
+                            </div>
+                        ` : ''}
+
+                        ${queueHtml}
+                    </div>
+                `;
+            };
+
+            ws.onclose = function (e) {
+                console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+                container.innerHTML = `<div class="card empty-state">Disconnected. Attempting to reconnect...</div>`;
+                setTimeout(function () {
+                    connect();
+                }, 1000);
+            };
+
+            ws.onerror = function (err) {
+                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                ws.close();
+            };
+        }
+
+        async function updateConfig() {
+            const inputPath = document.getElementById('path-input').value;
+            const smartRename = document.getElementById('rename-input').checked;
+            const debugMode = document.getElementById('debug-input').checked;
+
+            const res = await fetch('/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    download_path: inputPath,
+                    rename_smart: smartRename,
+                    debug_mode: debugMode
+                })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert('Settings updated successfully!');
+            } else {
+                alert('Error: ' + data.detail);
+            }
+        }
+
+        async function cancelDownload() {
+            if (confirm("Are you sure you want to stop sending the current download to the server? It will be skipped.")) {
+                try {
+                    await fetch('/cancel', { method: 'POST' });
+                } catch (e) {
+                    console.error("Cancel failed", e);
+                }
+            }
+        }
+
+        connect();
+    </script>
+</body>
+
+</html>

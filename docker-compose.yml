@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  teledrop:
+    build: .
+    container_name: teledrop_app
+    restart: unless-stopped
+    ports:
+      - "36168:36168"
+    volumes:
+      - ./media:/media
+      - ./session:/session
+      - .:/app
+      - /mnt:/mnt
