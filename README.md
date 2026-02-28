@@ -63,4 +63,6 @@ The web dashboard allows you to configure several runtime variables dynamically 
 
 ## 📜 License
 
-This project is open-source and free to use.
+This project is released under the [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/).
+
+You are free to use, modify, and distribute this software for personal and educational purposes, but **strictly no commercial use** is allowed. See the `LICENSE` file for more details.
